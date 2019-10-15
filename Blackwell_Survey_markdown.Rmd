@@ -1,0 +1,237 @@
+---
+title: "Customer Brand Preferences Report"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(cache = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Executive summary
+
+In this task Danielle asked us to assess, using the data collected through a survey, which brand Blackwell should partner with according to clients' preferences: Acer or Sony. However, this data is incomplete: 5.000 out of the 15.000 data points given lack the variable at stake, brand preference. In the complete data we already see that 63% of our clients prefer Sony, and if we predict brand preference for the missing data points this weight doesn't change much (61-39%). Therefore, if we had to choose one brand to partner with, it would be Sony, however, this would mean disregarding 37% of our clients who would prefer Acer. 
+
+On the other hand, this data looks like it's taken from a clustered sample, which gives us volume but not revenue (we remember that older and clients in the West were spending less than the young clients from the Center were doing the most and biggest purchases, etc). As a next step we should have a deeper look at both data together to look for possible income instead of possible volume.
+
+```{r, echo = FALSE}
+
+library(readr)
+CompleteResponses <- read_csv("C:/Users/user/Downloads/CompleteResponses.csv", col_types = cols(brand = col_character()))
+CompleteResponses[-which(CompleteResponses$brand == 0), "brand"] <- "Sony"
+CompleteResponses[which(CompleteResponses$brand == 0), "brand"] <- "Acer"
+CompleteResponses$brand <- as.factor(CompleteResponses$brand)
+```
+
+## Data understanding
+
+To tackle this problem, the first thing we need to do is seeing how the variable we want to predict is distributed:
+
+```{r, echo = FALSE}
+library(ggplot2)
+```
+
+
+```{r}
+ggplot(CompleteResponses, aes(x = brand, fill = brand)) + geom_bar(colour = "black")
+```
+
+Here it looks like we should partner with Sony for sure, as customers prefering Sony outnumber customers prefering Acer (37-63% balance). However we can't know yet if the answers missing could change this result. To find out, first we need to know the other variables and the impact they have on brand preference.
+
+Our survey has 6 more questions:
+
+#### Question 1: What is your yearly salary, not including bonuses?
+
+In this question customers had to type in a numeric value:
+
+```{r}
+hist(CompleteResponses$salary, breaks = 1000)
+```
+
+In this graph we see that we have too much concentration of responses at 20.000 and at 150.000$ per year, which could mean that our system doesn't recognise values below and over these values and is "forcing" them. To keep them from skewing our model, we'll take these datapoints out.
+
+```{r, echo = FALSE}
+salaryok1 <- CompleteResponses[-which(CompleteResponses$salary == 20000), ]
+salaryok <- salaryok1[-which(salaryok1$salary == 150000),]
+```
+
+Once this is done, this is the relationship between salary and brand:
+
+```{r}
+ggplot(salaryok, aes(x = salary, fill = brand)) + geom_histogram(colour = "black")
+
+```
+
+We can notice that, while customers with salaries up to 40k and above 100k clearly prefer Sony, customers in between are more divided between brands, and for some salary ranges they even prefer Acer.
+
+#### Question 2: What is your age?
+In this question customers had to type in a numeric value:
+
+```{r}
+hist(CompleteResponses$age, breaks = 120)
+table(CompleteResponses$age)
+
+```
+
+Again, we find a big concentration of data at 20 and 80 years old, which could be caused by the same system issue as before, and therefore we'll remove these datapoints from our sample for the same reason.
+
+```{r, echo = FALSE}
+ageok1 <- salaryok[-which(salaryok$age == 20),]
+ageok <- ageok1[-which(ageok1$age == 80),]
+```
+
+Once these are removed, this is the distribution of brand preference per age:
+
+```{r}
+ggplot(ageok, aes(x = age, fill = brand)) + geom_histogram(colour = "black")
+```
+
+We can see that at some age points there is greater/smaller balance between brands, so this might also be a determining factor.
+
+If we see age combined with salary, we can spot very clear boundaries age, salary and brand preference:
+
+```{r}
+
+ggplot(ageok, aes(x = ageok$age, y = ageok$salary, color = brand)) + geom_point()
+
+```
+
+
+#### Question 3: What is the highest level of education you have obtained?
+
+In this question customers had 4 options:
+
+0 = Less than High School Degree, 1 = High School Degree, 2 = Some College, 3 = 4-Year College Degree, 4 = Master's, Doctoral or Professional Degree
+
+```{r}
+ggplot(ageok, aes(x = elevel, fill = brand)) + geom_histogram(colour = "black")
+```
+
+#### Question 4: What is your car?
+
+Where: 1 = BMW, 2 = Buick, 3 = Cadillac, 4 = Chevrolet, 5 = Chrysler, 6 = Dodge, 7 = Ford, 8 = Honda, 9 = Hyundai, 10 = Jeep, 11 = Kia, 12 = Lincoln, 13 = Mazda, 14 = Mercedes Benz, 15 = Mitsubishi, 16 = Nissan, 17 = Ram, 18 = Subaru, 19 = Toyota, 20 = None of the above
+
+```{r}
+ggplot(ageok, aes(x = car, fill = brand)) + geom_bar(colour = "black")
+```
+
+#### Question 5: What is your zip code?
+
+In this question customers had 9 options:
+
+0 = New England, 1 = Mid-Atlantic, 2 = East North Central, 3 = West North Central, 4 = South Atlantic, 5 = East South Central, 6 = West South Central, 7 = Mountain, 8 = Pacific
+
+```{r}
+ggplot(ageok, aes(x = zipcode, fill = brand)) + geom_histogram(colour = "black")
+```
+
+Strangely enough, we can see that for the last 3 questions (educational level, car and zipcode), brand preference doesn't change much. Also, we notice that all options have more or less the same amount of responses, which could imply that we are dealing with a clustered sample.
+
+
+
+#### Question 6: What amount of credit is available to you?
+
+In this question customers had to type in a numeric value:
+
+```{r}
+ggplot(ageok, aes(x = credit, fill = brand)) + geom_histogram(colour = "black")
+```
+
+For this variable we see that for some specific credit available weights are different, thus it could have an impact. However, we have to take into account that this is a sensitive question to answer for a customer and one that they might not even be aware of, therefore we would only keep it if there was a clear relationship.
+
+To solve this, we will run a decision tree:
+
+```{r}
+library(party)
+DecisionTreeFit <- ctree(brand ~ ., data = ageok, controls = ctree_control(maxdepth = 3))
+plot(DecisionTreeFit, type = "simple")
+
+```
+
+After running it with different depths we see that salary and age are always the main variables and that it isn't until depth = 6 that a 3rd variable comes into play, which is educational level and not credit as we thought it could be. This could be random, because as we've seen in the previous section there was no clear relationship between educational level and brand prefered.
+
+
+## Pre processing
+
+- As seen in the Data Understanding section, we decided we will remove the following concentration outliers: ages 20 and 80, and salaries 20.000$ and 150.000$. 
+
+- As for feature selection, we will only keep as variables for our modeling salary and age, as they are the only variables proven to affect brand preference
+
+
+## Modeling & Evaluation
+
+To determine the brand preference for the customers with missing data, we will use C5.0 and random forest classification models, and according to their performance we'll choose one over the other:
+
+C5.0 Performance:
+
+```{r}
+library(lattice)
+library(caret)
+
+set.seed(107)
+ageok <- subset(ageok, select = c(age, salary, brand))
+inTrain <- createDataPartition(y = ageok$brand, p = .75, list = FALSE)
+
+training <- ageok[ inTrain,]
+testing <- ageok[-inTrain,]
+
+
+```
+
+```{r}
+library(C50)
+
+ctrl <- trainControl(method = "repeatedcv", repeats = 3, classProbs = TRUE, summaryFunction = twoClassSummary)
+C5_0TreeFit <- train(brand ~ ., data = training, method = "C5.0", tuneLength = 2, trControl = ctrl, metric = "ROC", preProc = c("center", "scale"))
+
+C5_0TreeFitbrand <- predict(C5_0TreeFit, newdata = testing, )
+confusionMatrix(data = C5_0TreeFitbrand, testing$brand)
+
+```
+
+Random Forest Performance:
+```{r}
+library(randomForest)
+
+ctrl <- trainControl(method = "repeatedcv", repeats = 3, classProbs = TRUE, summaryFunction = twoClassSummary)
+RandomForestFit <- train(brand ~ ., data = training, method = "rf", tuneLength = 2, trControl = ctrl, metric = "ROC", preProc = c("center", "scale"))
+
+RandomForestFitbrand <- predict(RandomForestFit, newdata = testing, )
+confusionMatrix(RandomForestFitbrand, testing$brand)
+
+```
+
+C5.0's accuracy and kappa are better than those of random forest (accuracy: 0.9093 vs 0.898, kappa: 0.811 vs 0.7855), and therefore we will use these for our predictions.
+
+## Deployment
+
+First of all, to make sure our predictions will be useful for the incomplete data set, we will make sure that the variables chosen (salary and age) are distributed in a similar way as in the training dataset:
+
+```{r}
+library(readr)
+IncompleteResponses <- read_csv("C:/Users/user/Downloads/SurveyIncomplete.csv", col_types = cols(brand = col_character()))
+IncompleteResponses[-which(IncompleteResponses$brand == 0), "brand"] <- "Sony"
+IncompleteResponses[which(IncompleteResponses$brand == 0), "brand"] <- "Acer"
+IncompleteResponses$brand <- as.factor(IncompleteResponses$brand)
+incsalaryok1 <- IncompleteResponses[-which(IncompleteResponses$salary == 20000), ]
+incsalaryok <- incsalaryok1[-which(incsalaryok1$salary == 150000),]
+incageok1 <- incsalaryok[-which(incsalaryok$age == 20),]
+incompletesurveyageok <- incageok1[-which(incageok1$age == 80),]
+
+
+ggplot() + geom_density(data = CompleteResponses, aes(x = salary), colour = "black") + geom_density(data = IncompleteResponses, aes(x = salary), colour = "red")
+
+ggplot() + geom_density(data = CompleteResponses, aes(x = age), colour = "black") + geom_density(data = IncompleteResponses, aes(x = age), colour = "red")
+
+```
+
+In these previous graphs we can see that their distribution is similar, so we can use our C5.0 confidently. These are the quantities predicted:
+```{r}
+C5_0Tree_IncompleteSurvey_brand <- predict(C5_0TreeFit, newdata = incompletesurveyageok, )
+RandomForest_IncompleteSurvey_brand <- predict(RandomForestFit, newdata = incompletesurveyageok, )
+
+table(C5_0Tree_IncompleteSurvey_brand)
+```
+
+If we added these predictions to the actual known data the weights could change to 61 (Sony) - 39% (Acer), but the brand prefered would still be the same.
